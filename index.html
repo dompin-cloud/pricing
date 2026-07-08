@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Runic Printing — Pricing Calculator</title>
+<style>
+  :root{
+    --bg:#12151c; --panel:#1a1f2b; --panel2:#222937; --border:#2e3748;
+    --text:#e8ecf3; --muted:#8b96a8; --accent:#7c5cff; --accent2:#3ddc97;
+    --warn:#ffb454; --bad:#ff6b6b; --radius:10px;
+  }
+  *{box-sizing:border-box; margin:0; padding:0}
+  body{background:var(--bg); color:var(--text); font-family:'Segoe UI',system-ui,sans-serif; font-size:14px}
+  header{display:flex; align-items:center; gap:16px; padding:14px 22px; background:var(--panel); border-bottom:1px solid var(--border); flex-wrap:wrap}
+  header h1{font-size:18px; font-weight:600}
+  header h1 span{color:var(--accent)}
+  nav{display:flex; gap:4px; margin-left:auto; flex-wrap:wrap}
+  nav button{background:none; border:1px solid transparent; color:var(--muted); padding:8px 14px; border-radius:8px; cursor:pointer; font-size:14px}
+  nav button.active{background:var(--panel2); color:var(--text); border-color:var(--border)}
+  nav button:hover{color:var(--text)}
+  main{padding:20px; max-width:1200px; margin:0 auto}
+  .tab{display:none}
+  .tab.active{display:block}
+  .card{background:var(--panel); border:1px solid var(--border); border-radius:var(--radius); padding:18px; margin-bottom:16px}
+  .card h2{font-size:15px; margin-bottom:12px; color:var(--text)}
+  .grid{display:grid; gap:12px}
+  .g2{grid-template-columns:repeat(auto-fit,minmax(200px,1fr))}
+  .g3{grid-template-columns:repeat(auto-fit,minmax(160px,1fr))}
+  label{display:block; font-size:12px; color:var(--muted); margin-bottom:4px}
+  input,select{width:100%; background:var(--panel2); border:1px solid var(--border); color:var(--text); padding:8px 10px; border-radius:7px; font-size:14px}
+  input:focus,select:focus{outline:none; border-color:var(--accent)}
+  button.btn{background:var(--accent); border:none; color:#fff; padding:9px 16px; border-radius:8px; cursor:pointer; font-size:14px; font-weight:600}
+  button.btn.secondary{background:var(--panel2); border:1px solid var(--border); color:var(--text)}
+  button.btn.danger{background:transparent; border:1px solid var(--bad); color:var(--bad)}
+  button.btn:hover{filter:brightness(1.15)}
+  table{width:100%; border-collapse:collapse}
+  th{font-size:11px; text-transform:uppercase; letter-spacing:.05em; color:var(--muted); text-align:left; padding:8px 10px; border-bottom:1px solid var(--border); cursor:pointer; white-space:nowrap; user-select:none}
+  td{padding:8px 10px; border-bottom:1px solid #232a38; white-space:nowrap}
+  tbody tr{cursor:pointer}
+  tbody tr:hover{background:var(--panel2)}
+  .num{text-align:right}
+  th.num{text-align:right}
+  .pos{color:var(--accent2)} .neg{color:var(--bad)} .mut{color:var(--muted)}
+  .toolbar{display:flex; gap:10px; margin-bottom:14px; flex-wrap:wrap; align-items:center}
+  .toolbar input[type=search]{max-width:260px}
+  .breakdown{background:var(--panel2); border-radius:8px; padding:14px; font-size:13px}
+  .breakdown .row{display:flex; justify-content:space-between; padding:3px 0}
+  .breakdown .row.total{border-top:1px solid var(--border); margin-top:6px; padding-top:8px; font-weight:700; font-size:15px}
+  .breakdown .row.big{color:var(--accent2); font-weight:700; font-size:17px}
+  .pill{display:inline-block; padding:2px 8px; border-radius:20px; font-size:11px; background:var(--panel2); border:1px solid var(--border); color:var(--muted)}
+  .editor-grid{display:grid; grid-template-columns:1.2fr 1fr; gap:18px}
+  @media(max-width:800px){.editor-grid{grid-template-columns:1fr}}
+  .list-row{display:flex; gap:10px; align-items:end; margin-bottom:10px; flex-wrap:wrap}
+  .list-row > div{flex:1; min-width:110px}
+  .list-row .del{flex:0}
+  .hint{font-size:12px; color:var(--muted); margin-top:8px; line-height:1.5}
+  .scrollx{overflow-x:auto}
+  dialog{background:var(--panel); color:var(--text); border:1px solid var(--border); border-radius:var(--radius); padding:0; max-width:820px; width:95%}
+  dialog::backdrop{background:rgba(0,0,0,.6)}
+  .dlg-head{display:flex; justify-content:space-between; align-items:center; padding:14px 18px; border-bottom:1px solid var(--border)}
+  .dlg-body{padding:18px; max-height:75vh; overflow-y:auto}
+  .footerbar{display:flex; gap:10px; justify-content:flex-end; padding:14px 18px; border-top:1px solid var(--border)}
+</style>
+</head>
+<body>
+<header>
+  <h1><span>◆</span> Runic Printing — Pricing Calculator</h1>
+  <nav>
+    <button data-tab="products" class="active">Products</button>
+    <button data-tab="machines">Machines</button>
+    <button data-tab="filaments">Filaments</button>
+    <button data-tab="settings">Settings</button>
+  </nav>
+</header>
+<main>
+
+<!-- PRODUCTS -->
+<section id="tab-products" class="tab active">
+  <div class="toolbar">
+    <button class="btn" onclick="openEditor()">+ New Product</button>
+    <input type="search" id="search" placeholder="Search products…" oninput="renderProducts()">
+    <span class="pill" id="prodCount"></span>
+    <span style="margin-left:auto"></span>
+    <button class="btn secondary" onclick="exportCSV()">Export CSV</button>
+  </div>
+  <div class="card scrollx">
+    <table id="prodTable">
+      <thead><tr>
+        <th onclick="setSort('name')">Product</th>
+        <th class="num" onclick="setSort('weightG')">Grams</th>
+        <th class="num" onclick="setSort('hours')">Hours</th>
+        <th class="num" onclick="setSort('units')">Units</th>
+        <th class="num" onclick="setSort('_cost')">Batch Cost</th>
+        <th class="num" onclick="setSort('_unit')">Price / Unit</th>
+        <th class="num" onclick="setSort('currentPrice')">Current</th>
+        <th class="num" onclick="setSort('_delta')">Δ</th>
+      </tr></thead>
+      <tbody id="prodBody"></tbody>
+    </table>
+  </div>
+</section>
+
+<!-- MACHINES -->
+<section id="tab-machines" class="tab">
+  <div class="card">
+    <h2>Printers</h2>
+    <div id="machineList"></div>
+    <button class="btn secondary" onclick="addMachine()">+ Add Machine</button>
+    <p class="hint">Hourly cost = electricity (avg watts × your $/kWh) + depreciation (purchase price ÷ lifetime hours) + maintenance $/hr (nozzles, plates, belts). Lifetime of ~5,000 print-hours is a common assumption — adjust to taste.</p>
+  </div>
+</section>
+
+<!-- FILAMENTS -->
+<section id="tab-filaments" class="tab">
+  <div class="card">
+    <h2>Filaments</h2>
+    <div id="filamentList"></div>
+    <button class="btn secondary" onclick="addFilament()">+ Add Filament</button>
+    <p class="hint">Cost per gram = price per kg ÷ 1000. The “Legacy” entry matches your old sheet’s flat $0.05/g so imported products price similarly until you assign real filaments.</p>
+  </div>
+</section>
+
+<!-- SETTINGS -->
+<section id="tab-settings" class="tab">
+  <div class="card">
+    <h2>Global Settings</h2>
+    <div class="grid g3">
+      <div><label>Electricity rate ($/kWh)</label><input type="number" step="0.001" id="s-kwh"></div>
+      <div><label>Labor rate ($/hr, hands-on)</label><input type="number" step="0.5" id="s-labor"></div>
+      <div><label>Failure rate (%)</label><input type="number" step="1" id="s-fail"></div>
+      <div><label>Default markup (% of cost)</label><input type="number" step="5" id="s-markup"></div>
+      <div><label>Round prices up to nearest ($)</label><input type="number" step="0.05" id="s-round"></div>
+    </div>
+    <p class="hint">Your last Xcel bill: $268.95 ÷ 1,678 kWh = $0.160/kWh effective (includes fixed charges). Failure rate adds a % of material + electricity to cover failed prints. Markup default matches your old sheet’s 50%.</p>
+    <div style="margin-top:14px"><button class="btn" onclick="saveSettings()">Save Settings</button></div>
+  </div>
+  <div class="card">
+    <h2>Backup</h2>
+    <div class="toolbar" style="margin-bottom:0">
+      <button class="btn secondary" onclick="exportJSON()">Export all data (JSON)</button>
+      <button class="btn secondary" onclick="document.getElementById('importFile').click()">Import JSON</button>
+      <input type="file" id="importFile" accept=".json" style="display:none" onchange="importJSON(this)">
+      <button class="btn danger" onclick="resetAll()">Reset to defaults</button>
+    </div>
+    <p class="hint">Data saves automatically in this browser. Export a JSON backup occasionally, or to move to another computer.</p>
+  </div>
+</section>
+</main>
+
+<!-- PRODUCT EDITOR -->
+<dialog id="editor">
+  <div class="dlg-head"><h2 id="edTitle">New Product</h2><button class="btn secondary" onclick="closeEditor()">✕</button></div>
+  <div class="dlg-body">
+    <div class="editor-grid">
+      <div class="grid g2">
+        <div style="grid-column:1/-1"><label>Product name</label><input id="p-name"></div>
+        <div><label>Filament</label><select id="p-filament"></select></div>
+        <div><label>Machine</label><select id="p-machine"></select></div>
+        <div><label>Filament used (grams, whole batch)</label><input type="number" step="0.01" id="p-weight"></div>
+        <div><label>Print time (hours)</label><input type="number" step="0.25" id="p-hours"></div>
+        <div><label>Units per batch</label><input type="number" step="1" id="p-units" value="1"></div>
+        <div><label>Extra parts $ (LEDs, magnets, straps…)</label><input type="number" step="0.01" id="p-parts" value="0"></div>
+        <div><label>Hands-on labor (minutes)</label><input type="number" step="5" id="p-labor" value="0"></div>
+        <div><label>Markup % (blank = default)</label><input type="number" step="5" id="p-markup" placeholder=""></div>
+        <div><label>Current selling price ($/unit, optional)</label><input type="number" step="0.01" id="p-current"></div>
+      </div>
+      <div>
+        <div class="breakdown" id="breakdown"></div>
+      </div>
+    </div>
+  </div>
+  <div class="footerbar">
+    <button class="btn danger" id="btnDelete" onclick="deleteProduct()">Delete</button>
+    <button class="btn secondary" onclick="duplicateProduct()" id="btnDup">Duplicate</button>
+    <span style="flex:1"></span>
+    <button class="btn secondary" onclick="closeEditor()">Cancel</button>
+    <button class="btn" onclick="saveProduct()">Save</button>
+  </div>
+</dialog>
+
+<script>
+"use strict";
+const LS_KEY = "runicPricingV1";
+
+const DEFAULTS = {
+  settings: { kwhRate: 0.160, laborRate: 15, failureRate: 5, defaultMarkup: 50, roundTo: 0.25 },
+  machines: [
+    { id:"m1", name:"Snapmaker U1 #1", cost:850,  watts:130, lifetimeHrs:5000, maintPerHr:0.05 },
+    { id:"m2", name:"Snapmaker U1 #2", cost:850,  watts:130, lifetimeHrs:5000, maintPerHr:0.05 },
+    { id:"m3", name:"Snapmaker J1S",   cost:1100, watts:125, lifetimeHrs:5000, maintPerHr:0.05 },
+    { id:"m4", name:"Creality K2 Plus",cost:1800, watts:275, lifetimeHrs:5000, maintPerHr:0.05 },
+    { id:"m5", name:"Bambu X1C",       cost:1200, watts:100, lifetimeHrs:5000, maintPerHr:0.05 }
+  ],
+  filaments: [
+    { id:"f0", name:"Legacy rate (old sheet $0.05/g)", pricePerKg:50 },
+    { id:"f1", name:"PLA (generic)",  pricePerKg:22 },
+    { id:"f2", name:"PETG",           pricePerKg:26 },
+    { id:"f3", name:"TPU",            pricePerKg:40 },
+    { id:"f4", name:"ABS / ASA",      pricePerKg:28 }
+  ],
+  products: [{"id":"p1","name":"Fidget Bolt","filamentId":"f0","machineId":"m5","weightG":192.54,"hours":7.75,"units":5,"partsCost":0.0,"laborMin":0,"markup":null,"currentPrice":5.0},{"id":"p2","name":"2 color Octo Wall Mount","filamentId":"f0","machineId":"m5","weightG":468.21,"hours":26.5,"units":1,"partsCost":0.0,"laborMin":0,"markup":null,"currentPrice":70.0},{"id":"p3","name":"1 Fuck Coin","filamentId":"f0","machineId":"m5","weightG":218.93,"hours":7.75,"units":60,"partsCost":0.0,"laborMin":0,"markup":null,"currentPrice":1.0},{"id":"p4","name":"Fidget Clicker","filamentId":"f0","machineId":"m5","weightG":428.96,"hours":7.5,"units":15,"partsCost":0.0,"laborMin":0,"markup":null,"currentPrice":5.0},{"id":"p5","name":"1 Color Octo Wall Mount","filamentId":"f0","machineId":"m5","weightG":287.12,"hours":10.0,"units":1,"partsCost":0.0,"laborMin":0,"markup":null,"currentPrice":35.0},{"id":"p6","name":"Not so Collasal Sword","filamentId":"f0","machineId":"m5","weightG":1100.65,"hours":41.5,"units":1,"partsCost":0.0,"laborMin":0,"markup":null,"currentPrice":135.0},{"id":"p7","name":"4 Color Moon Blade (Karambit)","filamentId":"f0","machineId":"m5","weightG":585.15,"hours":42.5,"units":4,"partsCost":0.0,"laborMin":0,"markup":null,"currentPrice":25.0},{"id":"p8","name":"4 Color Snake Katana","filamentId":"f0","machineId":"m5","weightG":560.82,"hours":40.0,"units":1,"partsCost":0.0,"laborMin":0,"markup":null,"currentPrice":95.0},{"id":"p9","name":"Snake Katana","filamentId":"f0","machineId":"m5","weightG":180.72,"hours":7.5,"units":1,"partsCost":0.0,"laborMin":0,"markup":null,"currentPrice":25.0},{"id":"p10","name":"Moon Blade","filamentId":"f0","machineId":"m5","weightG":151.32,"hours":8.25,"units":4,"partsCost":0.0,"laborMin":0,"markup":null,"currentPrice":10.0},{"id":"p11","name":"Seeker Blade","filamentId":"f0","machineId":"m5","weightG":192.39,"hours":7.0,"units":1,"partsCost":0.0,"laborMin":0,"markup":null,"currentPrice":25.0},{"id":"p12","name":"Alien Hand Controller Holder","filamentId":"f0","machineId":"m5","weightG":531.77,"hours":22.0,"units":4,"partsCost":0.0,"laborMin":0,"markup":null,"currentPrice":20.0},{"id":"p13","name":"Raven Skull Dice Tower","filamentId":"f0","machineId":"m5","weightG":208.91,"hours":12.0,"units":1,"partsCost":0.0,"laborMin":0,"markup":null,"currentPrice":30.0},{"id":"p14","name":"L Dragon Skull","filamentId":"f0","machineId":"m5","weightG":1380.76,"hours":32.0,"units":1,"partsCost":0.0,"laborMin":0,"markup":null,"currentPrice":145.0},{"id":"p15","name":"M Dragon Skull","filamentId":"f0","machineId":"m5","weightG":866.42,"hours":29.75,"units":1,"partsCost":0.0,"laborMin":0,"markup":null,"currentPrice":105.0},{"id":"p16","name":"Crystal Dragon Skull","filamentId":"f0","machineId":"m5","weightG":256.33,"hours":9.75,"units":1,"partsCost":0.0,"laborMin":0,"markup":null,"currentPrice":30.0},{"id":"p17","name":"Horned Dragon Skull","filamentId":"f0","machineId":"m5","weightG":265.45,"hours":11.5,"units":1,"partsCost":0.0,"laborMin":0,"markup":null,"currentPrice":35.0},{"id":"p18","name":"Cthulu Dragon Skull","filamentId":"f0","machineId":"m5","weightG":161.22,"hours":8.5,"units":1,"partsCost":0.0,"laborMin":0,"markup":null,"currentPrice":35.0},{"id":"p19","name":"Punk Dragon Skull","filamentId":"f0","machineId":"m5","weightG":171.88,"hours":7.5,"units":1,"partsCost":0.0,"laborMin":0,"markup":null,"currentPrice":25.0},{"id":"p20","name":"Spiked Dragon Skull","filamentId":"f0","machineId":"m5","weightG":236.99,"hours":10.5,"units":1,"partsCost":0.0,"laborMin":0,"markup":null,"currentPrice":35.0},{"id":"p21","name":"Roll-up Dice Case/Tower","filamentId":"f0","machineId":"m5","weightG":398.29,"hours":10.5,"units":1,"partsCost":0.0,"laborMin":0,"markup":null,"currentPrice":45.0},{"id":"p22","name":"Tower Wine Dispencer","filamentId":"f0","machineId":"m5","weightG":1146.76,"hours":44.5,"units":1,"partsCost":4.3,"laborMin":0,"markup":null,"currentPrice":150.0},{"id":"p23","name":"Impossible Passthrough","filamentId":"f0","machineId":"m5","weightG":527.17,"hours":33.5,"units":15,"partsCost":0.0,"laborMin":0,"markup":null,"currentPrice":10.0},{"id":"p24","name":"Torso Impossible Passthrough","filamentId":"f0","machineId":"m5","weightG":733.89,"hours":34.5,"units":10,"partsCost":0.0,"laborMin":0,"markup":null,"currentPrice":10.0},{"id":"p25","name":"Chinese Dragon Trophy","filamentId":"f0","machineId":"m5","weightG":1021.42,"hours":75.5,"units":1,"partsCost":0.0,"laborMin":0,"markup":null,"currentPrice":180.0},{"id":"p26","name":"Fairie Dragon Trophyu","filamentId":"f0","machineId":"m5","weightG":674.95,"hours":53.5,"units":1,"partsCost":0.0,"laborMin":0,"markup":null,"currentPrice":125.0},{"id":"p27","name":"Bladed Dragon Trophy","filamentId":"f0","machineId":"m5","weightG":665.99,"hours":47.0,"units":1,"partsCost":0.0,"laborMin":0,"markup":null,"currentPrice":115.0},{"id":"p28","name":"Dragon Mask TPU","filamentId":"f0","machineId":"m5","weightG":458.72,"hours":63.5,"units":1,"partsCost":1.0,"laborMin":0,"markup":null,"currentPrice":125.0},{"id":"p29","name":"Cyber Samurai Mask TPU","filamentId":"f0","machineId":"m5","weightG":222.4,"hours":39.0,"units":1,"partsCost":2.5,"laborMin":0,"markup":null,"currentPrice":75.0},{"id":"p30","name":"Dragon Clicker","filamentId":"f0","machineId":"m5","weightG":573.49,"hours":26.3,"units":36,"partsCost":0.34,"laborMin":0,"markup":null,"currentPrice":5.0},{"id":"p31","name":"Tree Dice Holder","filamentId":"f0","machineId":"m5","weightG":330.04,"hours":18.5,"units":3,"partsCost":0.0,"laborMin":0,"markup":null,"currentPrice":15.0},{"id":"p32","name":"Nightfall Dagger TPU","filamentId":"f0","machineId":"m5","weightG":157.5,"hours":28.5,"units":1,"partsCost":0.0,"laborMin":0,"markup":null,"currentPrice":50.0},{"id":"p33","name":"Norse Chess Set","filamentId":"f0","machineId":"m5","weightG":959.33,"hours":29.5,"units":1,"partsCost":0.0,"laborMin":0,"markup":null,"currentPrice":110.0},{"id":"p34","name":"Chasm Mechanical","filamentId":"f0","machineId":"m5","weightG":503.68,"hours":35.25,"units":1,"partsCost":12.69,"laborMin":0,"markup":null,"currentPrice":105.0},{"id":"p35","name":"Runic LED Sign","filamentId":"f0","machineId":"m5","weightG":330.95,"hours":8.25,"units":1,"partsCost":15.0,"laborMin":0,"markup":null,"currentPrice":null},{"id":"p36","name":"Pain Stim","filamentId":"f0","machineId":"m5","weightG":827.31,"hours":67.75,"units":45,"partsCost":0.0,"laborMin":0,"markup":null,"currentPrice":null},{"id":"p37","name":"Droid Mask","filamentId":"f0","machineId":"m5","weightG":586.6,"hours":49.41,"units":1,"partsCost":0.0,"laborMin":0,"markup":null,"currentPrice":null},{"id":"p38","name":"Multi Face Fidget","filamentId":"f0","machineId":"m5","weightG":1232.9,"hours":68.5,"units":12,"partsCost":0.0,"laborMin":0,"markup":null,"currentPrice":15.0},{"id":"p39","name":"Kitsune Mask TPU","filamentId":"f0","machineId":"m5","weightG":786.7,"hours":60.75,"units":1,"partsCost":2.5,"laborMin":0,"markup":null,"currentPrice":145.0},{"id":"p40","name":"Book End Box","filamentId":"f0","machineId":"m5","weightG":1210.84,"hours":57.5,"units":2,"partsCost":0.0,"laborMin":0,"markup":null,"currentPrice":80.0},{"id":"p41","name":"Dream Catcher Face","filamentId":"f0","machineId":"m5","weightG":862.59,"hours":16.75,"units":4,"partsCost":0.0,"laborMin":0,"markup":null,"currentPrice":20.0},{"id":"p42","name":"Tengu TPU God","filamentId":"f0","machineId":"m5","weightG":471.4,"hours":38.5,"units":1,"partsCost":2.5,"laborMin":0,"markup":null,"currentPrice":90.0},{"id":"p43","name":"Pixel Cat Fidget","filamentId":"f0","machineId":"m5","weightG":2447.18,"hours":157.5,"units":19,"partsCost":0.0,"laborMin":0,"markup":null,"currentPrice":20.0},{"id":"p44","name":"Sacred Tree","filamentId":"f0","machineId":"m5","weightG":307.3,"hours":34.25,"units":1,"partsCost":0.0,"laborMin":0,"markup":null,"currentPrice":70.0},{"id":"p45","name":"Twisting Tree Dice Tower","filamentId":"f0","machineId":"m5","weightG":621.43,"hours":30.25,"units":1,"partsCost":0.0,"laborMin":0,"markup":null,"currentPrice":85.0},{"id":"p46","name":"Winged Dragon Dual TPU","filamentId":"f0","machineId":"m5","weightG":73.2,"hours":8.0,"units":1,"partsCost":0.0,"laborMin":0,"markup":null,"currentPrice":null},{"id":"p47","name":"MedKit Box","filamentId":"f0","machineId":"m5","weightG":443.7,"hours":27.0,"units":1,"partsCost":0.0,"laborMin":0,"markup":null,"currentPrice":70.0},{"id":"p48","name":"Geisha Mask TPU","filamentId":"f0","machineId":"m5","weightG":358.9,"hours":27.0,"units":1,"partsCost":2.5,"laborMin":0,"markup":null,"currentPrice":65.0},{"id":"p49","name":"Line Art Alien","filamentId":"f0","machineId":"m5","weightG":112.93,"hours":4.75,"units":1,"partsCost":0.0,"laborMin":0,"markup":null,"currentPrice":15.0},{"id":"p50","name":"Brujin Figure","filamentId":"f0","machineId":"m5","weightG":218.64,"hours":15.5,"units":6,"partsCost":0,"laborMin":0,"markup":null,"currentPrice":10.0},{"id":"p51","name":"Harlequin Mask TPU","filamentId":"f0","machineId":"m5","weightG":670.3,"hours":50.75,"units":1,"partsCost":2.5,"laborMin":0,"markup":null,"currentPrice":125.0},{"id":"p52","name":"Catarina Wall Mask","filamentId":"f0","machineId":"m5","weightG":929.17,"hours":69.5,"units":3,"partsCost":0.0,"laborMin":0,"markup":null,"currentPrice":55.0},{"id":"p53","name":"SteamPunk Mask TPU","filamentId":"f0","machineId":"m5","weightG":306.9,"hours":27.25,"units":1,"partsCost":2.5,"laborMin":0,"markup":null,"currentPrice":65.0},{"id":"p54","name":"Alien Wall Head","filamentId":"f0","machineId":"m5","weightG":870.02,"hours":78.5,"units":3,"partsCost":0.0,"laborMin":0,"markup":null,"currentPrice":55.0},{"id":"p55","name":"Oni Mask TPU","filamentId":"f0","machineId":"m5","weightG":487.1,"hours":35.25,"units":1,"partsCost":2.5,"laborMin":0,"markup":null,"currentPrice":90.0},{"id":"p56","name":"Castle Dragon Dice Tower","filamentId":"f0","machineId":"m5","weightG":1181.21,"hours":63.0,"units":1,"partsCost":0.0,"laborMin":0,"markup":null,"currentPrice":170.0},{"id":"p57","name":"Mono Color Castle Dragon Dice Tower","filamentId":"f0","machineId":"m5","weightG":677.65,"hours":27.5,"units":3,"partsCost":0.0,"laborMin":0,"markup":null,"currentPrice":30.0},{"id":"p58","name":"Pumpkin Skull Mask TPU","filamentId":"f0","machineId":"m5","weightG":532.5,"hours":18.5,"units":1,"partsCost":2.5,"laborMin":0,"markup":null,"currentPrice":65.0},{"id":"p59","name":"clown pot","filamentId":"f0","machineId":"m5","weightG":991.45,"hours":82.0,"units":5,"partsCost":0,"laborMin":0,"markup":null,"currentPrice":35.0},{"id":"p60","name":"Raven Skull Pendants","filamentId":"f0","machineId":"m5","weightG":302.54,"hours":17.5,"units":32,"partsCost":0.0,"laborMin":0,"markup":null,"currentPrice":null},{"id":"p61","name":"Price Tags","filamentId":"f0","machineId":"m5","weightG":76.77,"hours":7.5,"units":68,"partsCost":0.0,"laborMin":0,"markup":null,"currentPrice":0.25},{"id":"p62","name":"Price Tag Box","filamentId":"f0","machineId":"m5","weightG":91.25,"hours":3.15,"units":1,"partsCost":0,"laborMin":0,"markup":null,"currentPrice":15.0},{"id":"p63","name":"Price Tag Stands","filamentId":"f0","machineId":"m5","weightG":240.64,"hours":5.5,"units":68,"partsCost":0,"laborMin":0,"markup":null,"currentPrice":null},{"id":"p64","name":"spikes","filamentId":"f0","machineId":"m5","weightG":238.16,"hours":7.0,"units":20,"partsCost":0,"laborMin":0,"markup":null,"currentPrice":null},{"id":"p65","name":"Bunny Paddle","filamentId":"f0","machineId":"m5","weightG":99.3,"hours":7.0,"units":1,"partsCost":0.0,"laborMin":0,"markup":null,"currentPrice":null},{"id":"p66","name":"MinimOwl","filamentId":"f0","machineId":"m5","weightG":130.26,"hours":3.25,"units":1,"partsCost":0.0,"laborMin":0,"markup":null,"currentPrice":null},{"id":"p67","name":"LowPoly Owl Desk Light","filamentId":"f0","machineId":"m5","weightG":129.56,"hours":4.25,"units":1,"partsCost":10.0,"laborMin":0,"markup":null,"currentPrice":35.0},{"id":"p68","name":"Chonk Dice Tower","filamentId":"f0","machineId":"m5","weightG":367.53,"hours":10.5,"units":1,"partsCost":0,"laborMin":0,"markup":null,"currentPrice":null},{"id":"p69","name":"Revan Helm","filamentId":"f0","machineId":"m5","weightG":847.5,"hours":54.75,"units":1,"partsCost":0.0,"laborMin":0,"markup":null,"currentPrice":null},{"id":"p70","name":"Ghostbuster Ooze Gun","filamentId":"f0","machineId":"m5","weightG":5062.79,"hours":125.25,"units":1,"partsCost":0.0,"laborMin":0,"markup":null,"currentPrice":null},{"id":"p71","name":"Tanks","filamentId":"f0","machineId":"m5","weightG":2977.58,"hours":68.25,"units":1,"partsCost":0.0,"laborMin":0,"markup":null,"currentPrice":null},{"id":"p72","name":"RedSpade Mask","filamentId":"f0","machineId":"m5","weightG":568.4,"hours":40.25,"units":1,"partsCost":0.0,"laborMin":0,"markup":null,"currentPrice":null},{"id":"p73","name":"Whisper Dagger","filamentId":"f0","machineId":"m5","weightG":497.4,"hours":48.25,"units":4,"partsCost":0.0,"laborMin":0,"markup":null,"currentPrice":null},{"id":"p74","name":"Chey Mask","filamentId":"f0","machineId":"m5","weightG":433.1,"hours":32.0,"units":1,"partsCost":1.75,"laborMin":0,"markup":null,"currentPrice":null},{"id":"p75","name":"Tylers Mask","filamentId":"f0","machineId":"m5","weightG":392.1,"hours":34.0,"units":1,"partsCost":1.75,"laborMin":0,"markup":null,"currentPrice":null},{"id":"p76","name":"Hannaya Mask","filamentId":"f0","machineId":"m5","weightG":446.4,"hours":37.5,"units":1,"partsCost":1.75,"laborMin":0,"markup":null,"currentPrice":null},{"id":"p77","name":"Gloria Clock","filamentId":"f0","machineId":"m5","weightG":408.15,"hours":12.5,"units":1,"partsCost":15.0,"laborMin":0,"markup":null,"currentPrice":null},{"id":"p78","name":"Honnari Mask","filamentId":"f0","machineId":"m5","weightG":458.3,"hours":35.25,"units":1,"partsCost":11.75,"laborMin":0,"markup":null,"currentPrice":null},{"id":"p79","name":"Chey mount order","filamentId":"f0","machineId":"m5","weightG":174.57,"hours":6.25,"units":1,"partsCost":0.0,"laborMin":0,"markup":null,"currentPrice":null},{"id":"p80","name":"LED Litho sign","filamentId":"f0","machineId":"m5","weightG":279.0,"hours":10.25,"units":1,"partsCost":10.0,"laborMin":0,"markup":null,"currentPrice":null},{"id":"p81","name":"pain stim clicker","filamentId":"f0","machineId":"m5","weightG":948.41,"hours":43.0,"units":30,"partsCost":0.34,"laborMin":0,"markup":null,"currentPrice":null},{"id":"p82","name":"Alien Mask","filamentId":"f0","machineId":"m5","weightG":658.9,"hours":55.75,"units":1,"partsCost":55.0,"laborMin":0,"markup":null,"currentPrice":null},{"id":"p83","name":"Ghens Mask","filamentId":"f0","machineId":"m5","weightG":575.1,"hours":43.75,"units":1,"partsCost":35.0,"laborMin":0,"markup":null,"currentPrice":null},{"id":"p84","name":"Sleep Token Litho","filamentId":"f0","machineId":"m5","weightG":205.23,"hours":10.5,"units":1,"partsCost":20.0,"laborMin":0,"markup":null,"currentPrice":null},{"id":"p85","name":"Silver Geisha Mask","filamentId":"f0","machineId":"m5","weightG":406.5,"hours":36.0,"units":1,"partsCost":3.0,"laborMin":0,"markup":null,"currentPrice":null},{"id":"p86","name":"Aaron Prototype order","filamentId":"f0","machineId":"m5","weightG":605.4,"hours":32.75,"units":1,"partsCost":0.0,"laborMin":0,"markup":null,"currentPrice":null},{"id":"p87","name":"Hels Mask","filamentId":"f0","machineId":"m5","weightG":498.8,"hours":40.0,"units":1,"partsCost":5.0,"laborMin":0,"markup":null,"currentPrice":null},{"id":"p88","name":"Fox Mask","filamentId":"f0","machineId":"m5","weightG":1261.21,"hours":157.41,"units":1,"partsCost":0.0,"laborMin":0,"markup":null,"currentPrice":null}]
+};
+
+let db = load();
+function load(){
+  try{
+    const raw = localStorage.getItem(LS_KEY);
+    if(raw){ return JSON.parse(raw); }
+  }catch(e){ console.warn("localStorage unavailable", e); }
+  return JSON.parse(JSON.stringify(DEFAULTS));
+}
+function save(){
+  try{ localStorage.setItem(LS_KEY, JSON.stringify(db)); }
+  catch(e){ /* file:// storage blocked in some browsers — export JSON instead */ }
+}
+const uid = () => "id" + Math.random().toString(36).slice(2,9);
+const fmt = n => isFinite(n) ? "$" + n.toFixed(2) : "—";
+
+// ---------- CALC ----------
+function calc(p){
+  const s = db.settings;
+  const fil = db.filaments.find(f=>f.id===p.filamentId) || db.filaments[0] || {pricePerKg:0};
+  const mac = db.machines.find(m=>m.id===p.machineId) || db.machines[0] || {watts:0,cost:0,lifetimeHrs:1,maintPerHr:0};
+  const material = (p.weightG||0) * fil.pricePerKg/1000;
+  const electricity = (p.hours||0) * (mac.watts/1000) * s.kwhRate;
+  const depreciation = (p.hours||0) * (mac.cost / Math.max(1, mac.lifetimeHrs));
+  const maintenance = (p.hours||0) * (mac.maintPerHr||0);
+  const labor = ((p.laborMin||0)/60) * s.laborRate;
+  const failure = (material + electricity) * (s.failureRate||0)/100;
+  const parts = p.partsCost||0;
+  const cost = material + electricity + depreciation + maintenance + labor + failure + parts;
+  const markup = (p.markup==null || p.markup==="") ? s.defaultMarkup : +p.markup;
+  const profit = cost * markup/100;
+  const total = cost + profit;
+  const units = Math.max(1, p.units||1);
+  const perUnitRaw = total/units;
+  const r = s.roundTo>0 ? Math.ceil(perUnitRaw/s.roundTo)*s.roundTo : perUnitRaw;
+  return {material, electricity, depreciation, maintenance, labor, failure, parts, cost, markup, profit, total, perUnitRaw, perUnit:r, units};
+}
+
+// ---------- TABS ----------
+document.querySelectorAll("nav button").forEach(b=>{
+  b.onclick = ()=>{
+    document.querySelectorAll("nav button").forEach(x=>x.classList.remove("active"));
+    document.querySelectorAll(".tab").forEach(x=>x.classList.remove("active"));
+    b.classList.add("active");
+    document.getElementById("tab-"+b.dataset.tab).classList.add("active");
+  };
+});
+
+// ---------- PRODUCTS TABLE ----------
+let sortKey = "name", sortDir = 1;
+function setSort(k){ if(sortKey===k) sortDir*=-1; else {sortKey=k; sortDir=1;} renderProducts(); }
+function renderProducts(){
+  const q = (document.getElementById("search").value||"").toLowerCase();
+  const rows = db.products
+    .map(p=>{ const c=calc(p); return {...p, _cost:c.cost, _unit:c.perUnit, _delta:(p.currentPrice!=null && p.currentPrice!=="")? p.currentPrice - c.perUnit : null}; })
+    .filter(p=>p.name.toLowerCase().includes(q))
+    .sort((a,b)=>{ let x=a[sortKey], y=b[sortKey];
+      if(x==null) return 1; if(y==null) return -1;
+      if(typeof x==="string") return x.localeCompare(y)*sortDir;
+      return (x-y)*sortDir; });
+  document.getElementById("prodCount").textContent = rows.length + " products";
+  document.getElementById("prodBody").innerHTML = rows.map(p=>`
+    <tr onclick="openEditor('${p.id}')">
+      <td>${esc(p.name)}</td>
+      <td class="num mut">${(+p.weightG||0).toFixed(0)}g</td>
+      <td class="num mut">${(+p.hours||0).toFixed(1)}</td>
+      <td class="num mut">${p.units||1}</td>
+      <td class="num">${fmt(p._cost)}</td>
+      <td class="num"><b>${fmt(p._unit)}</b></td>
+      <td class="num mut">${p.currentPrice!=null && p.currentPrice!=="" ? fmt(+p.currentPrice) : "—"}</td>
+      <td class="num ${p._delta==null?'mut':(p._delta>=0?'pos':'neg')}">${p._delta==null?"—":(p._delta>=0?"+":"")+p._delta.toFixed(2)}</td>
+    </tr>`).join("");
+}
+function esc(s){ return String(s).replace(/[&<>"']/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c])); }
+
+// ---------- EDITOR ----------
+let editingId = null;
+const dlg = document.getElementById("editor");
+function fillSelect(id, list, val){
+  document.getElementById(id).innerHTML = list.map(x=>`<option value="${x.id}" ${x.id===val?"selected":""}>${esc(x.name)}</option>`).join("");
+}
+function openEditor(id){
+  editingId = id || null;
+  const p = id ? db.products.find(x=>x.id===id) : {units:1, partsCost:0, laborMin:0};
+  document.getElementById("edTitle").textContent = id ? "Edit Product" : "New Product";
+  document.getElementById("btnDelete").style.display = id ? "" : "none";
+  document.getElementById("btnDup").style.display = id ? "" : "none";
+  fillSelect("p-filament", db.filaments, p.filamentId || (db.filaments[0]||{}).id);
+  fillSelect("p-machine", db.machines, p.machineId || (db.machines[0]||{}).id);
+  setV("p-name",p.name||""); setV("p-weight",p.weightG); setV("p-hours",p.hours);
+  setV("p-units",p.units||1); setV("p-parts",p.partsCost||0); setV("p-labor",p.laborMin||0);
+  setV("p-markup",p.markup==null?"":p.markup); setV("p-current",p.currentPrice==null?"":p.currentPrice);
+  updateBreakdown();
+  dlg.showModal();
+}
+function setV(id,v){ document.getElementById(id).value = v==null?"":v; }
+function getV(id){ const v=document.getElementById(id).value; return v===""?null:+v; }
+function formProduct(){
+  return {
+    id: editingId || uid(),
+    name: document.getElementById("p-name").value.trim() || "Untitled",
+    filamentId: document.getElementById("p-filament").value,
+    machineId: document.getElementById("p-machine").value,
+    weightG: getV("p-weight")||0, hours: getV("p-hours")||0,
+    units: getV("p-units")||1, partsCost: getV("p-parts")||0,
+    laborMin: getV("p-labor")||0, markup: getV("p-markup"),
+    currentPrice: getV("p-current")
+  };
+}
+function updateBreakdown(){
+  const c = calc(formProduct());
+  document.getElementById("breakdown").innerHTML = `
+    <div class="row"><span>Filament</span><span>${fmt(c.material)}</span></div>
+    <div class="row"><span>Electricity</span><span>${fmt(c.electricity)}</span></div>
+    <div class="row"><span>Machine depreciation</span><span>${fmt(c.depreciation)}</span></div>
+    <div class="row"><span>Maintenance</span><span>${fmt(c.maintenance)}</span></div>
+    <div class="row"><span>Labor</span><span>${fmt(c.labor)}</span></div>
+    <div class="row"><span>Failure buffer</span><span>${fmt(c.failure)}</span></div>
+    <div class="row"><span>Extra parts</span><span>${fmt(c.parts)}</span></div>
+    <div class="row total"><span>Batch cost</span><span>${fmt(c.cost)}</span></div>
+    <div class="row"><span>Profit (${c.markup}%)</span><span>${fmt(c.profit)}</span></div>
+    <div class="row total"><span>Batch total</span><span>${fmt(c.total)}</span></div>
+    <div class="row big"><span>Price per unit (×${c.units})</span><span>${fmt(c.perUnit)}</span></div>
+    <div class="row mut"><span>Unrounded</span><span>${fmt(c.perUnitRaw)}</span></div>`;
+}
+["p-filament","p-machine","p-weight","p-hours","p-units","p-parts","p-labor","p-markup"].forEach(id=>{
+  document.getElementById(id).addEventListener("input", updateBreakdown);
+  document.getElementById(id).addEventListener("change", updateBreakdown);
+});
+function saveProduct(){
+  const p = formProduct();
+  const i = db.products.findIndex(x=>x.id===p.id);
+  if(i>=0) db.products[i]=p; else db.products.push(p);
+  save(); closeEditor(); renderProducts();
+}
+function deleteProduct(){
+  if(!editingId) return;
+  if(!confirm("Delete this product?")) return;
+  db.products = db.products.filter(x=>x.id!==editingId);
+  save(); closeEditor(); renderProducts();
+}
+function duplicateProduct(){
+  const p = formProduct(); p.id = uid(); p.name += " (copy)";
+  db.products.push(p); save(); closeEditor(); renderProducts();
+}
+function closeEditor(){ dlg.close(); }
+
+// ---------- MACHINES ----------
+function renderMachines(){
+  document.getElementById("machineList").innerHTML = db.machines.map((m,i)=>{
+    const hourly = (m.watts/1000)*db.settings.kwhRate + m.cost/Math.max(1,m.lifetimeHrs) + (m.maintPerHr||0);
+    return `<div class="list-row">
+      <div style="flex:2"><label>Name</label><input value="${esc(m.name)}" onchange="upM(${i},'name',this.value)"></div>
+      <div><label>Cost ($)</label><input type="number" value="${m.cost}" onchange="upM(${i},'cost',+this.value)"></div>
+      <div><label>Avg watts printing</label><input type="number" value="${m.watts}" onchange="upM(${i},'watts',+this.value)"></div>
+      <div><label>Lifetime (hrs)</label><input type="number" value="${m.lifetimeHrs}" onchange="upM(${i},'lifetimeHrs',+this.value)"></div>
+      <div><label>Maint $/hr</label><input type="number" step="0.01" value="${m.maintPerHr}" onchange="upM(${i},'maintPerHr',+this.value)"></div>
+      <div><label>≈ $/print-hr</label><input value="${hourly.toFixed(3)}" disabled></div>
+      <div class="del"><button class="btn danger" onclick="delM(${i})">✕</button></div>
+    </div>`;
+  }).join("");
+}
+function upM(i,k,v){ db.machines[i][k]=v; save(); renderMachines(); renderProducts(); }
+function delM(i){ if(confirm("Remove machine?")){ db.machines.splice(i,1); save(); renderMachines(); renderProducts(); } }
+function addMachine(){ db.machines.push({id:uid(), name:"New printer", cost:0, watts:100, lifetimeHrs:5000, maintPerHr:0.05}); save(); renderMachines(); }
+
+// ---------- FILAMENTS ----------
+function renderFilaments(){
+  document.getElementById("filamentList").innerHTML = db.filaments.map((f,i)=>`
+    <div class="list-row">
+      <div style="flex:2"><label>Name</label><input value="${esc(f.name)}" onchange="upF(${i},'name',this.value)"></div>
+      <div><label>Price per kg ($)</label><input type="number" step="0.01" value="${f.pricePerKg}" onchange="upF(${i},'pricePerKg',+this.value)"></div>
+      <div><label>= $/gram</label><input value="${(f.pricePerKg/1000).toFixed(4)}" disabled></div>
+      <div class="del"><button class="btn danger" onclick="delF(${i})">✕</button></div>
+    </div>`).join("");
+}
+function upF(i,k,v){ db.filaments[i][k]=v; save(); renderFilaments(); renderProducts(); }
+function delF(i){ if(confirm("Remove filament?")){ db.filaments.splice(i,1); save(); renderFilaments(); renderProducts(); } }
+function addFilament(){ db.filaments.push({id:uid(), name:"New filament", pricePerKg:25}); save(); renderFilaments(); }
+
+// ---------- SETTINGS ----------
+function renderSettings(){
+  const s = db.settings;
+  setV("s-kwh",s.kwhRate); setV("s-labor",s.laborRate); setV("s-fail",s.failureRate);
+  setV("s-markup",s.defaultMarkup); setV("s-round",s.roundTo);
+}
+function saveSettings(){
+  db.settings = {
+    kwhRate:+document.getElementById("s-kwh").value||0,
+    laborRate:+document.getElementById("s-labor").value||0,
+    failureRate:+document.getElementById("s-fail").value||0,
+    defaultMarkup:+document.getElementById("s-markup").value||0,
+    roundTo:+document.getElementById("s-round").value||0
+  };
+  save(); renderProducts(); renderMachines(); alert("Settings saved.");
+}
+
+// ---------- IMPORT / EXPORT ----------
+function download(name, text, type){
+  const a=document.createElement("a");
+  a.href=URL.createObjectURL(new Blob([text],{type})); a.download=name; a.click();
+  URL.revokeObjectURL(a.href);
+}
+function exportJSON(){ download("runic-pricing-backup.json", JSON.stringify(db,null,2), "application/json"); }
+function importJSON(inp){
+  const f=inp.files[0]; if(!f) return;
+  const r=new FileReader();
+  r.onload=()=>{ try{
+      const d=JSON.parse(r.result);
+      if(!d.products||!d.machines||!d.filaments||!d.settings) throw new Error("Missing sections");
+      db=d; save(); renderAll(); alert("Imported.");
+    }catch(e){ alert("Import failed: "+e.message); } };
+  r.readAsText(f); inp.value="";
+}
+function exportCSV(){
+  const head="Product,Grams,Hours,Units,Batch Cost,Batch Total,Price Per Unit,Current Price\n";
+  const lines=db.products.map(p=>{ const c=calc(p);
+    return [`"${p.name.replace(/"/g,'""')}"`, p.weightG, p.hours, c.units, c.cost.toFixed(2), c.total.toFixed(2), c.perUnit.toFixed(2), p.currentPrice??""].join(","); });
+  download("runic-pricing.csv", head+lines.join("\n"), "text/csv");
+}
+function resetAll(){
+  if(!confirm("Reset EVERYTHING to defaults? Your edits will be lost (export a backup first).")) return;
+  db=JSON.parse(JSON.stringify(DEFAULTS)); save(); renderAll();
+}
+
+function renderAll(){ renderProducts(); renderMachines(); renderFilaments(); renderSettings(); }
+renderAll();
+</script>
+</body>
+</html>
