@@ -66,6 +66,7 @@
 <body>
 <header>
   <h1><span>◆</span> Runic Printing — Pricing Calculator</h1>
+  <span class="pill" id="syncStatus" title="Cloud sync status">local only</span>
   <nav>
     <button data-tab="products" class="active">Products</button>
     <button data-tab="machines">Machines</button>
@@ -93,6 +94,7 @@
         <th class="num" onclick="setSort('units')">Units</th>
         <th class="num" onclick="setSort('_cost')">Batch Cost</th>
         <th class="num" onclick="setSort('_unit')">Price / Unit</th>
+        <th class="num" onclick="setSort('_profit')">Profit / Unit</th>
         <th class="num" onclick="setSort('currentPrice')">Current</th>
         <th class="num" onclick="setSort('_delta')">Δ</th>
       </tr></thead>
@@ -134,6 +136,19 @@
     </div>
     <p class="hint">Your last Xcel bill: $268.95 ÷ 1,678 kWh = $0.160/kWh effective (includes fixed charges). Failure rate adds a % of material + electricity to cover failed prints. Markup default matches your old sheet’s 50%.</p>
     <div style="margin-top:14px"><button class="btn" onclick="saveSettings()">Save Settings</button></div>
+  </div>
+  <div class="card">
+    <h2>Cloud Sync (GitHub)</h2>
+    <div class="grid g2">
+      <div><label>Data repository (private)</label><input id="sync-repo" placeholder="dompin-cloud/pricing-data"></div>
+      <div><label>Fine-grained access token</label><input id="sync-token" type="password" placeholder="github_pat_…"></div>
+    </div>
+    <div class="toolbar" style="margin:12px 0 0">
+      <button class="btn" onclick="connectSync()">Connect &amp; Sync</button>
+      <button class="btn secondary" onclick="syncNow(true)">Sync now</button>
+      <button class="btn danger" onclick="disconnectSync()">Disconnect this device</button>
+    </div>
+    <p class="hint" id="syncHint">Not connected. To set up: GitHub → Settings → Developer settings → Personal access tokens → Fine-grained tokens → Generate new token. Set Repository access to <b>only</b> your data repo, and under Permissions give <b>Contents: Read and write</b>. Set a long expiration. Paste the token above on each device — it's stored only in this browser, never in the public app.</p>
   </div>
   <div class="card">
     <h2>Backup</h2>
@@ -211,8 +226,10 @@ function load(){
   return JSON.parse(JSON.stringify(DEFAULTS));
 }
 function save(){
+  db.meta = { updatedAt: Date.now() };
   try{ localStorage.setItem(LS_KEY, JSON.stringify(db)); }
   catch(e){ /* file:// storage blocked in some browsers — export JSON instead */ }
+  schedulePush();
 }
 const uid = () => "id" + Math.random().toString(36).slice(2,9);
 const fmt = n => isFinite(n) ? "$" + n.toFixed(2) : "—";
@@ -255,7 +272,7 @@ function setSort(k){ if(sortKey===k) sortDir*=-1; else {sortKey=k; sortDir=1;} r
 function renderProducts(){
   const q = (document.getElementById("search").value||"").toLowerCase();
   const rows = db.products
-    .map(p=>{ const c=calc(p); return {...p, _cost:c.cost, _unit:c.perUnit, _delta:(p.currentPrice!=null && p.currentPrice!=="")? p.currentPrice - c.perUnit : null}; })
+    .map(p=>{ const c=calc(p); return {...p, _cost:c.cost, _unit:c.perUnit, _profit:c.perUnit - c.cost/c.units, _delta:(p.currentPrice!=null && p.currentPrice!=="")? p.currentPrice - c.perUnit : null}; })
     .filter(p=>p.name.toLowerCase().includes(q))
     .sort((a,b)=>{ let x=a[sortKey], y=b[sortKey];
       if(x==null) return 1; if(y==null) return -1;
@@ -270,6 +287,7 @@ function renderProducts(){
       <td class="num mut">${p.units||1}</td>
       <td class="num">${fmt(p._cost)}</td>
       <td class="num"><b>${fmt(p._unit)}</b></td>
+      <td class="num ${p._profit>=0?'pos':'neg'}">${fmt(p._profit)}</td>
       <td class="num mut">${p.currentPrice!=null && p.currentPrice!=="" ? fmt(+p.currentPrice) : "—"}</td>
       <td class="num ${p._delta==null?'mut':(p._delta>=0?'pos':'neg')}">${p._delta==null?"—":(p._delta>=0?"+":"")+p._delta.toFixed(2)}</td>
     </tr>`).join("");
@@ -416,9 +434,9 @@ function importJSON(inp){
   r.readAsText(f); inp.value="";
 }
 function exportCSV(){
-  const head="Product,Grams,Hours,Units,Batch Cost,Batch Total,Price Per Unit,Current Price\n";
+  const head="Product,Grams,Hours,Units,Batch Cost,Batch Total,Price Per Unit,Profit Per Unit,Current Price\n";
   const lines=db.products.map(p=>{ const c=calc(p);
-    return [`"${p.name.replace(/"/g,'""')}"`, p.weightG, p.hours, c.units, c.cost.toFixed(2), c.total.toFixed(2), c.perUnit.toFixed(2), p.currentPrice??""].join(","); });
+    return [`"${p.name.replace(/"/g,'""')}"`, p.weightG, p.hours, c.units, c.cost.toFixed(2), c.total.toFixed(2), c.perUnit.toFixed(2), (c.perUnit-c.cost/c.units).toFixed(2), p.currentPrice??""].join(","); });
   download("runic-pricing.csv", head+lines.join("\n"), "text/csv");
 }
 function resetAll(){
@@ -426,8 +444,111 @@ function resetAll(){
   db=JSON.parse(JSON.stringify(DEFAULTS)); save(); renderAll();
 }
 
-function renderAll(){ renderProducts(); renderMachines(); renderFilaments(); renderSettings(); }
+// ---------- CLOUD SYNC (GitHub contents API) ----------
+const SYNC_KEY = "runicPricingSync";
+let syncCfg = null;
+try{ syncCfg = JSON.parse(localStorage.getItem(SYNC_KEY)); }catch(e){}
+let pushTimer = null, pushing = false, pushQueued = false;
+
+function setSyncStatus(txt, color){
+  const el = document.getElementById("syncStatus");
+  el.textContent = txt;
+  el.style.color = color || "var(--muted)";
+  el.style.borderColor = color || "var(--border)";
+}
+function ghHeaders(){
+  return { "Authorization": "Bearer " + syncCfg.token, "Accept": "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28" };
+}
+function ghUrl(){ return "https://api.github.com/repos/" + syncCfg.repo + "/contents/data.json"; }
+function b64encode(str){ return btoa(unescape(encodeURIComponent(str))); }
+function b64decode(str){ return decodeURIComponent(escape(atob(str))); }
+
+async function pullRemote(){
+  const res = await fetch(ghUrl(), { headers: ghHeaders(), cache: "no-store" });
+  if(res.status === 404) return { missing:true };
+  if(!res.ok) throw new Error("GitHub read failed: " + res.status);
+  const j = await res.json();
+  return { sha: j.sha, data: JSON.parse(b64decode(j.content.replace(/\n/g,""))) };
+}
+async function pushRemote(){
+  if(!syncCfg) return;
+  if(pushing){ pushQueued = true; return; }
+  pushing = true;
+  setSyncStatus("syncing…", "var(--warn)");
+  try{
+    let sha;
+    try{ const r = await pullRemote(); sha = r.sha; }catch(e){}
+    const body = { message: "sync " + new Date().toISOString(), content: b64encode(JSON.stringify(db)) };
+    if(sha) body.sha = sha;
+    const res = await fetch(ghUrl(), { method:"PUT", headers: ghHeaders(), body: JSON.stringify(body) });
+    if(!res.ok) throw new Error("GitHub write failed: " + res.status);
+    setSyncStatus("synced ✓", "var(--accent2)");
+  }catch(e){
+    console.warn(e);
+    setSyncStatus("sync error", "var(--bad)");
+  }finally{
+    pushing = false;
+    if(pushQueued){ pushQueued = false; schedulePush(); }
+  }
+}
+function schedulePush(){
+  if(!syncCfg) return;
+  clearTimeout(pushTimer);
+  pushTimer = setTimeout(pushRemote, 1500);
+}
+async function syncNow(manual){
+  if(!syncCfg){ if(manual) alert("Not connected. Enter your repo and token, then click Connect & Sync."); return; }
+  setSyncStatus("syncing…", "var(--warn)");
+  try{
+    const r = await pullRemote();
+    const localT = (db.meta && db.meta.updatedAt) || 0;
+    const remoteT = (!r.missing && r.data.meta && r.data.meta.updatedAt) || 0;
+    if(r.missing || localT > remoteT){
+      await pushRemote();
+    } else if(remoteT > localT){
+      db = r.data;
+      try{ localStorage.setItem(LS_KEY, JSON.stringify(db)); }catch(e){}
+      renderAll();
+      setSyncStatus("synced ✓", "var(--accent2)");
+    } else {
+      setSyncStatus("synced ✓", "var(--accent2)");
+    }
+    if(manual && r.missing) alert("First sync complete — data file created in " + syncCfg.repo + ".");
+  }catch(e){
+    console.warn(e);
+    setSyncStatus("sync error", "var(--bad)");
+    if(manual) alert("Sync failed: " + e.message + "\nCheck the repo name and that your token has Contents read/write on it.");
+  }
+}
+function connectSync(){
+  const repo = document.getElementById("sync-repo").value.trim();
+  const token = document.getElementById("sync-token").value.trim();
+  if(!repo || !repo.includes("/")){ alert("Enter the data repo as owner/name, e.g. dompin-cloud/pricing-data"); return; }
+  if(!token){ alert("Paste your fine-grained token first."); return; }
+  syncCfg = { repo, token };
+  try{ localStorage.setItem(SYNC_KEY, JSON.stringify(syncCfg)); }catch(e){}
+  document.getElementById("syncHint").innerHTML = "Connected to <b>" + esc(repo) + "</b>. Data syncs automatically on load and after every change.";
+  syncNow(true);
+}
+function disconnectSync(){
+  if(!confirm("Disconnect sync on this device? (Data on GitHub and other devices is untouched.)")) return;
+  syncCfg = null;
+  try{ localStorage.removeItem(SYNC_KEY); }catch(e){}
+  setSyncStatus("local only");
+  renderSyncCard();
+}
+function renderSyncCard(){
+  document.getElementById("sync-repo").value = syncCfg ? syncCfg.repo : "";
+  document.getElementById("sync-token").value = syncCfg ? syncCfg.token : "";
+  if(syncCfg){
+    document.getElementById("syncHint").innerHTML = "Connected to <b>" + esc(syncCfg.repo) + "</b>. Data syncs automatically on load and after every change.";
+  }
+}
+
+function renderAll(){ renderProducts(); renderMachines(); renderFilaments(); renderSettings(); renderSyncCard(); }
 renderAll();
+if(syncCfg){ syncNow(false); }
+window.addEventListener("focus", ()=>{ if(syncCfg && !pushing) syncNow(false); });
 </script>
 </body>
 </html>
